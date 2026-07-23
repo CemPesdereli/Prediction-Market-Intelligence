@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Polymarket - Ortak Bahisler</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 24px; background: #f5f6fa; color: #1a1a1a; }
+        h1 { font-size: 22px; margin-bottom: 4px; }
+        .subtitle { color: #666; margin-bottom: 20px; font-size: 14px; }
+        form { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+        select, button { padding: 8px 12px; font-size: 14px; border-radius: 6px; border: 1px solid #ccc; }
+        button { background: #2453ff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #1a3fd6; }
+        .card { background: white; border-radius: 10px; padding: 16px 20px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .market-title { font-size: 16px; font-weight: 600; margin: 0 0 6px 0; }
+        .market-title a { color: #1a1a1a; text-decoration: none; }
+        .market-title a:hover { text-decoration: underline; }
+        .meta { font-size: 12px; color: #888; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+        th { color: #666; font-weight: 500; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .badge.yes { background: #e6f7ec; color: #1a8f4a; }
+        .badge.no { background: #fdeaea; color: #c0392b; }
+        .badge.other { background: #eee; color: #555; }
+        .empty { padding: 30px; text-align: center; color: #888; background: white; border-radius: 10px; }
+        .top20 { font-size: 12px; color: #888; margin-top: 30px; }
+        .holder-count { font-weight: 700; color: #2453ff; }
+    </style>
+</head>
+<body>
+
+<h1>Polymarket &mdash; Kategori Bazlı Ortak Bahisler</h1>
+<p class="subtitle">
+    Seçilen kategorinin aylık (MONTH) leaderboard'undaki ilk 20 kullanıcının,
+    aynı piyasada aktif olarak (henüz sonuçlanmamış) bahis yaptığı ortak marketler.
+    <span th:if="${lastSyncedAt}">Son senkronizasyon: <b th:text="${lastSyncedAt}"></b></span>
+</p>
+
+<form method="get" th:action="@{/common-bets}">
+    <label for="category">Kategori:</label>
+    <select name="category" id="category" onchange="this.form.submit()">
+        <option th:each="c : ${categories}"
+                th:value="${c}"
+                th:text="${c}"
+                th:selected="${c == selectedCategory}"></option>
+    </select>
+    <noscript><button type="submit">Uygula</button></noscript>
+</form>
+
+<div th:if="${#lists.isEmpty(commonBets)}" class="empty">
+    Bu kategori için henüz ortak bahis bulunamadı (ya sync henüz çalışmadı ya da top-20 arasında kesişen aktif pozisyon yok).
+</div>
+
+<div th:each="bet : ${commonBets}" class="card">
+    <p class="market-title">
+        <a th:if="${bet.eventSlug}" th:href="'https://polymarket.com/event/' + ${bet.eventSlug}" target="_blank"
+           th:text="${bet.marketTitle}">Market başlığı</a>
+        <span th:unless="${bet.eventSlug}" th:text="${bet.marketTitle}">Market başlığı</span>
+    </p>
+    <p class="meta">
+        <span class="holder-count" th:text="${bet.holderCount} + ' kişi'"></span>
+        bu markette aktif pozisyon tutuyor
+        <span th:if="${bet.endDate}"> &middot; Bitiş: <span th:text="${bet.endDate}"></span></span>
+    </p>
+    <table>
+        <thead>
+        <tr>
+            <th>Kullanıcı</th>
+            <th>Cüzdan</th>
+            <th>Taraf</th>
+            <th>Güncel Fiyat</th>
+            <th>Güncel Değer ($)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="h : ${bet.holders}">
+            <td th:text="${h.userName} ?: '(isimsiz)'"></td>
+            <td th:text="${#strings.substring(h.proxyWallet,0,6)} + '...' + ${#strings.substring(h.proxyWallet, h.proxyWallet.length()-4, h.proxyWallet.length())}"></td>
+            <td>
+                <span th:if="${h.outcome != null and #strings.toLowerCase(h.outcome) == 'yes'}" class="badge yes" th:text="${h.outcome}"></span>
+                <span th:if="${h.outcome != null and #strings.toLowerCase(h.outcome) == 'no'}" class="badge no" th:text="${h.outcome}"></span>
+                <span th:if="${h.outcome == null or (#strings.toLowerCase(h.outcome) != 'yes' and #strings.toLowerCase(h.outcome) != 'no')}" class="badge other" th:text="${h.outcome} ?: '-'"></span>
+            </td>
+            <td th:text="${h.curPrice} ?: '-'"></td>
+            <td th:text="${h.currentValue} ?: '-'"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="top20" th:if="${top20 != null and !#lists.isEmpty(top20)}">
+    <details>
+        <summary th:text="'Bu ayki ilk 20 (' + ${selectedCategory} + ') listesini gör'"></summary>
+        <ol>
+            <li th:each="t : ${top20}" th:text="(${t.userName} ?: t.proxyWallet) + ' — PnL: ' + ${t.pnl}"></li>
+        </ol>
+    </details>
+</div>
+
+</body>
+</html>

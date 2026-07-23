@@ -1,0 +1,34 @@
+# Build output
+target/
+*.class
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# VS Code (macbook tarafinda acilirsa diye)
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Local H2 database dosyalari
+data/
+
+# Editor yedek dosyalari
+*~
+*.bak
+*.orig
+
+# Ortam / secret dosyalari
+.env
+.env.local
+*.env
