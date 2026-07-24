@@ -2,7 +2,7 @@
 <html lang="tr" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Polymarket - Ortak Bahisler</title>
+    <title>Polymarket - Geçmiş Ortak Bahisler</title>
     <style>
         body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 24px; background: #f5f6fa; color: #1a1a1a; }
         h1 { font-size: 22px; margin-bottom: 4px; }
@@ -23,27 +23,30 @@
         .badge.yes { background: #e6f7ec; color: #1a8f4a; }
         .badge.no { background: #fdeaea; color: #c0392b; }
         .badge.other { background: #eee; color: #555; }
+        .badge.won { background: #e6f7ec; color: #1a8f4a; }
+        .badge.lost { background: #fdeaea; color: #c0392b; }
+        .pnl.positive { color: #1a8f4a; font-weight: 600; }
+        .pnl.negative { color: #c0392b; font-weight: 600; }
         .empty { padding: 30px; text-align: center; color: #888; background: white; border-radius: 10px; }
-        .top20 { font-size: 12px; color: #888; margin-top: 30px; }
         .holder-count { font-weight: 700; color: #2453ff; }
-        .closed-link-btn { background: white; color: #2453ff; border: 1px solid #2453ff; margin-bottom: 16px; text-decoration: none; display: inline-block; }
-        .closed-link-btn:hover { background: #eef1ff; }
+        .back-link { display: inline-block; margin-bottom: 16px; color: #2453ff; text-decoration: none; font-size: 13px; }
+        .back-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
 
-<a class="closed-link-btn" th:href="@{/closed-common-bets(category=${selectedCategory})}">
-    Geçmiş Bahisleri Göster &rarr;
-</a>
+<a class="back-link" th:href="@{/common-bets(category=${selectedCategory})}">&larr; Aktif ortak bahislere dön</a>
 
-<h1>Polymarket &mdash; Kategori Bazlı Ortak Bahisler</h1>
+<h1>Polymarket &mdash; Kapanmış Ortak Bahisler (Son <span th:text="${closedWindowDays}"></span> Gün)</h1>
 <p class="subtitle">
-    Seçilen kategorinin aylık (MONTH) leaderboard'undaki ilk 20 kullanıcının,
-    aynı piyasada aktif olarak (henüz sonuçlanmamış) bahis yaptığı ortak marketler.
-    <span th:if="${lastSyncedAt}">Son senkronizasyon: <b th:text="${lastSyncedAt}"></b></span>
+    Seçilen kategorinin aylık leaderboard'undaki ilk 20 kullanıcının ortak girdiği ve
+    son <span th:text="${closedWindowDays}"></span> gün içinde sonuçlanmış marketler.
+    Redeem edilmemiş pozisyonlara ek olarak, redeem edilmiş kazananları da on-chain
+    aktivite geçmişinden yakalıyoruz; yine de bazı kazançlarda kar/zarar ($) tutarı
+    hesaplanamadığı için "-" görünebilir.
 </p>
 
-<form method="get" th:action="@{/common-bets}">
+<form method="get" th:action="@{/closed-common-bets}">
     <label for="category">Kategori:</label>
     <select name="category" id="category" onchange="this.form.submit()">
         <option th:each="c : ${categories}"
@@ -54,11 +57,11 @@
     <noscript><button type="submit">Uygula</button></noscript>
 </form>
 
-<div th:if="${#lists.isEmpty(commonBets)}" class="empty">
-    Bu kategori için henüz ortak bahis bulunamadı (ya sync henüz çalışmadı ya da top-20 arasında kesişen aktif pozisyon yok).
+<div th:if="${#lists.isEmpty(closedCommonBets)}" class="empty">
+    Son <span th:text="${closedWindowDays}"></span> gün içinde sonuçlanmış ortak bahis bulunamadı.
 </div>
 
-<div th:each="bet : ${commonBets}" class="card">
+<div th:each="bet : ${closedCommonBets}" class="card">
     <p class="market-title">
         <a th:if="${bet.eventSlug}" th:href="'https://polymarket.com/event/' + ${bet.eventSlug}" target="_blank"
            th:text="${bet.marketTitle}">Market başlığı</a>
@@ -66,7 +69,8 @@
     </p>
     <p class="meta">
         <span class="holder-count" th:text="${bet.holderCount} + ' kişi'"></span>
-        bu markette aktif pozisyon tutuyor
+        bu markette ortak pozisyon tutmuştu
+        <span th:if="${bet.resolvedOutcome}"> &middot; Sonuç: <b th:text="${bet.resolvedOutcome}"></b></span>
         <span th:if="${bet.endDate}"> &middot; Bitiş: <span th:text="${bet.endDate}"></span></span>
     </p>
     <table>
@@ -75,8 +79,8 @@
             <th>Kullanıcı</th>
             <th>Cüzdan</th>
             <th>Taraf</th>
-            <th>Güncel Fiyat</th>
-            <th>Güncel Değer ($)</th>
+            <th>Sonuç</th>
+            <th>Kar/Zarar ($)</th>
         </tr>
         </thead>
         <tbody>
@@ -88,20 +92,16 @@
                 <span th:if="${h.outcome != null and #strings.toLowerCase(h.outcome) == 'no'}" class="badge no" th:text="${h.outcome}"></span>
                 <span th:if="${h.outcome == null or (#strings.toLowerCase(h.outcome) != 'yes' and #strings.toLowerCase(h.outcome) != 'no')}" class="badge other" th:text="${h.outcome} ?: '-'"></span>
             </td>
-            <td th:text="${h.curPrice} ?: '-'"></td>
-            <td th:text="${h.currentValue} ?: '-'"></td>
+            <td>
+                <span th:if="${h.won}" class="badge won">Kazandı</span>
+                <span th:unless="${h.won}" class="badge lost">Kaybetti</span>
+            </td>
+            <td th:if="${h.cashPnl != null}" th:class="${h.cashPnl >= 0} ? 'pnl positive' : 'pnl negative'"
+                th:text="${h.cashPnl}"></td>
+            <td th:unless="${h.cashPnl != null}" th:text="'-'"></td>
         </tr>
         </tbody>
     </table>
-</div>
-
-<div class="top20" th:if="${top20 != null and !#lists.isEmpty(top20)}">
-    <details>
-        <summary th:text="'Bu ayki ilk 20 (' + ${selectedCategory} + ') listesini gör'"></summary>
-        <ol>
-            <li th:each="t : ${top20}" th:text="(${t.userName} ?: t.proxyWallet) + ' — PnL: ' + ${t.pnl}"></li>
-        </ol>
-    </details>
 </div>
 
 </body>

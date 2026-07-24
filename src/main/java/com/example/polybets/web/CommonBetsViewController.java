@@ -48,8 +48,6 @@ public class CommonBetsViewController {
         model.addAttribute("categories", Category.values());
         model.addAttribute("selectedCategory", selected);
         model.addAttribute("commonBets", commonBetsService.getCommonBets(selected));
-        model.addAttribute("closedCommonBets", closedCommonBetsService.getClosedCommonBets(selected));
-        model.addAttribute("closedWindowDays", closedWindowDays);
 
         var top20 = leaderboardRepository.findByCategoryOrderByRankAsc(selected);
         model.addAttribute("top20", top20);
@@ -63,5 +61,17 @@ public class CommonBetsViewController {
                                 .format(instant)));
 
         return "index";
+    }
+
+    @GetMapping("/closed-common-bets")
+    public String closedCommonBets(@RequestParam(name = "category", required = false) Category category, Model model) {
+        Category selected = category != null ? category : Category.valueOf(defaultCategory);
+
+        model.addAttribute("categories", Category.values());
+        model.addAttribute("selectedCategory", selected);
+        model.addAttribute("closedCommonBets", closedCommonBetsService.getClosedCommonBets(selected));
+        model.addAttribute("closedWindowDays", closedWindowDays);
+
+        return "closed-bets";
     }
 }
