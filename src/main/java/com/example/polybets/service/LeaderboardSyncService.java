@@ -4,8 +4,10 @@ import com.example.polybets.client.PolymarketDataApiClient;
 import com.example.polybets.client.dto.LeaderboardEntryDto;
 import com.example.polybets.client.dto.PositionDto;
 import com.example.polybets.domain.Category;
+import com.example.polybets.domain.ClosedPositionSnapshot;
 import com.example.polybets.domain.LeaderboardEntry;
 import com.example.polybets.domain.PositionSnapshot;
+import com.example.polybets.repository.ClosedPositionSnapshotRepository;
 import com.example.polybets.repository.LeaderboardEntryRepository;
 import com.example.polybets.repository.PositionSnapshotRepository;
 import org.slf4j.Logger;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -33,17 +36,23 @@ public class LeaderboardSyncService {
     private final PolymarketDataApiClient apiClient;
     private final LeaderboardEntryRepository leaderboardRepository;
     private final PositionSnapshotRepository positionRepository;
+    private final ClosedPositionSnapshotRepository closedPositionRepository;
     private final int topN;
+    private final int closedWindowDays;
 
     public LeaderboardSyncService(
             PolymarketDataApiClient apiClient,
             LeaderboardEntryRepository leaderboardRepository,
             PositionSnapshotRepository positionRepository,
-            @Value("${polymarket.top-n}") int topN) {
+            ClosedPositionSnapshotRepository closedPositionRepository,
+            @Value("${polymarket.top-n}") int topN,
+            @Value("${polymarket.closed-window-days}") int closedWindowDays) {
         this.apiClient = apiClient;
         this.leaderboardRepository = leaderboardRepository;
         this.positionRepository = positionRepository;
+        this.closedPositionRepository = closedPositionRepository;
         this.topN = topN;
+        this.closedWindowDays = closedWindowDays;
     }
 
     /**
@@ -58,9 +67,12 @@ public class LeaderboardSyncService {
         }
 
         Instant now = Instant.now();
+        LocalDate today = LocalDate.now();
+        LocalDate closedCutoff = today.minusDays(closedWindowDays);
 
         leaderboardRepository.deleteByCategory(category);
         positionRepository.deleteByCategory(category);
+        closedPositionRepository.deleteByCategory(category);
 
         int rank = 1;
         for (LeaderboardEntryDto entry : leaderboard) {
@@ -68,8 +80,8 @@ public class LeaderboardSyncService {
                     category, rank++, entry.proxyWallet(), entry.userName(),
                     entry.vol(), entry.pnl(), now));
 
-            List<PositionDto> positions = apiClient.getActivePositions(entry.proxyWallet());
-            for (PositionDto pos : positions) {
+            List<PositionDto> activePositions = apiClient.getActivePositions(entry.proxyWallet());
+            for (PositionDto pos : activePositions) {
                 if (pos.conditionId() == null) {
                     continue;
                 }
@@ -87,7 +99,46 @@ public class LeaderboardSyncService {
                         pos.endDate(),
                         now));
             }
+
+            List<PositionDto> closedPositions = apiClient.getClosedPositions(entry.proxyWallet());
+            for (PositionDto pos : closedPositions) {
+                if (pos.conditionId() == null || !isWithinClosedWindow(pos.endDate(), closedCutoff, today)) {
+                    continue;
+                }
+                boolean won = pos.curPrice() != null && pos.curPrice() >= 0.5;
+                String resolvedOutcome = won ? pos.outcome() : pos.oppositeOutcome();
+                closedPositionRepository.save(new ClosedPositionSnapshot(
+                        category,
+                        entry.proxyWallet(),
+                        entry.userName(),
+                        pos.conditionId(),
+                        pos.title(),
+                        pos.slug(),
+                        pos.eventSlug(),
+                        pos.outcome(),
+                        won,
+                        resolvedOutcome,
+                        pos.cashPnl(),
+                        pos.endDate(),
+                        now));
+            }
         }
         log.info("Kategori {} senkronize edildi: {} kullanici.", category, leaderboard.size());
+    }
+
+    /**
+     * endDate "YYYY-MM-DD" formatinda gelir (bkz. Polymarket /positions yaniti).
+     * Parse edilemeyen ya da olculu aralik disindaki kayitlar sessizce atlanir.
+     */
+    private boolean isWithinClosedWindow(String endDate, LocalDate cutoff, LocalDate today) {
+        if (endDate == null) {
+            return false;
+        }
+        try {
+            LocalDate parsed = LocalDate.parse(endDate.length() >= 10 ? endDate.substring(0, 10) : endDate);
+            return !parsed.isBefore(cutoff) && !parsed.isAfter(today);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

@@ -35,6 +35,7 @@ polymarket:
   order-by: PNL
   min-common-holders: 2
   positions-limit: 500
+  closed-window-days: 3
   sync:
     # Her 30 dakikada bir tum kategorileri senkronize eder
     cron: "0 */30 * * * *"

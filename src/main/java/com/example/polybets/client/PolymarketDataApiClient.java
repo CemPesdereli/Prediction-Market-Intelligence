@@ -68,12 +68,27 @@ public class PolymarketDataApiClient {
      * GET /positions?user=&redeemable=false&limit=
      */
     public List<PositionDto> getActivePositions(String proxyWallet) {
+        return getPositions(proxyWallet, false);
+    }
+
+    /**
+     * Bir cüzdanın piyasası sonuçlanmış (redeem edilebilir) pozisyonlarını getirir.
+     * Kazanan pozisyonlar genelde hızla redeem edilip listeden düştüğü için burada
+     * ağırlıklı olarak henüz redeem edilmemiş kayıtlar görülür; sonuç (kazandı/kaybetti)
+     * curPrice alanından (1 = kazandı, 0 = kaybetti) çıkarılır.
+     * GET /positions?user=&redeemable=true&limit=
+     */
+    public List<PositionDto> getClosedPositions(String proxyWallet) {
+        return getPositions(proxyWallet, true);
+    }
+
+    private List<PositionDto> getPositions(String proxyWallet, boolean redeemable) {
         try {
             List<PositionDto> result = webClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/positions")
                             .queryParam("user", proxyWallet)
-                            .queryParam("redeemable", false)
+                            .queryParam("redeemable", redeemable)
                             .queryParam("limit", positionsLimit)
                             .build())
                     .retrieve()
@@ -83,7 +98,8 @@ public class PolymarketDataApiClient {
                     .block();
             return result == null ? List.of() : result;
         } catch (Exception e) {
-            log.warn("Pozisyonlar cekilirken hata olustu (wallet={}): {}", proxyWallet, e.getMessage());
+            log.warn("Pozisyonlar cekilirken hata olustu (wallet={}, redeemable={}): {}",
+                    proxyWallet, redeemable, e.getMessage());
             return List.of();
         }
     }

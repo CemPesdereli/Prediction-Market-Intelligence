@@ -25,6 +25,7 @@ public record PositionDto(
         String icon,
         String eventSlug,
         String outcome,
+        String oppositeOutcome,
         Integer outcomeIndex,
         String endDate,
         Boolean negativeRisk
