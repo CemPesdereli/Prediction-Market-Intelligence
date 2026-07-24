@@ -1,5 +1,6 @@
 package com.example.polybets.client;
 
+import com.example.polybets.client.dto.ActivityDto;
 import com.example.polybets.client.dto.LeaderboardEntryDto;
 import com.example.polybets.client.dto.PositionDto;
 import com.example.polybets.domain.Category;
@@ -80,6 +81,35 @@ public class PolymarketDataApiClient {
      */
     public List<PositionDto> getClosedPositions(String proxyWallet) {
         return getPositions(proxyWallet, true);
+    }
+
+    /**
+     * Bir cüzdanın REDEEM (kazanıp claim ettiği) on-chain aktivitesini getirir.
+     * {@link #getClosedPositions} kazananları hızla kaybediyor çünkü redeem edilince
+     * /positions?redeemable=true listesinden düşüyorlar; bu, on-chain aktivite geçmişi
+     * olduğu için redeem sonrasında da kalıcı şekilde görünmeye devam ediyor.
+     * GET /activity?user=&type=REDEEM&start=&limit=
+     */
+    public List<ActivityDto> getRedeemActivity(String proxyWallet, long startEpochSeconds) {
+        try {
+            List<ActivityDto> result = webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/activity")
+                            .queryParam("user", proxyWallet)
+                            .queryParam("type", "REDEEM")
+                            .queryParam("start", startEpochSeconds)
+                            .queryParam("limit", positionsLimit)
+                            .build())
+                    .retrieve()
+                    .bodyToFlux(ActivityDto.class)
+                    .collectList()
+                    .timeout(Duration.ofSeconds(15))
+                    .block();
+            return result == null ? List.of() : result;
+        } catch (Exception e) {
+            log.warn("Redeem aktivitesi cekilirken hata olustu (wallet={}): {}", proxyWallet, e.getMessage());
+            return List.of();
+        }
     }
 
     private List<PositionDto> getPositions(String proxyWallet, boolean redeemable) {

@@ -1,6 +1,7 @@
 package com.example.polybets.service;
 
 import com.example.polybets.client.PolymarketDataApiClient;
+import com.example.polybets.client.dto.ActivityDto;
 import com.example.polybets.client.dto.LeaderboardEntryDto;
 import com.example.polybets.client.dto.PositionDto;
 import com.example.polybets.domain.Category;
@@ -18,7 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Tek bir kategori için Polymarket'ten leaderboard + pozisyon verisini çeker ve
@@ -100,6 +105,8 @@ public class LeaderboardSyncService {
                         now));
             }
 
+            Set<String> closedConditionIds = new HashSet<>();
+
             List<PositionDto> closedPositions = apiClient.getClosedPositions(entry.proxyWallet());
             for (PositionDto pos : closedPositions) {
                 if (pos.conditionId() == null || !isWithinClosedWindow(pos.endDate(), closedCutoff, today)) {
@@ -120,6 +127,35 @@ public class LeaderboardSyncService {
                         resolvedOutcome,
                         pos.cashPnl(),
                         pos.endDate(),
+                        now));
+                closedConditionIds.add(pos.conditionId());
+            }
+
+            // Kazanan pozisyonlar redeem edilir edilmez /positions?redeemable=true
+            // listesinden dusuyor. Bunlari yakalamak icin, ayni pencerede yapilmis
+            // REDEEM aktivitesine (on-chain, redeem sonrasi da kalici) bakiyoruz.
+            long cutoffEpochSeconds = closedCutoff.atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+            List<ActivityDto> redeemActivity = apiClient.getRedeemActivity(entry.proxyWallet(), cutoffEpochSeconds);
+            for (ActivityDto act : redeemActivity) {
+                if (act.conditionId() == null || !closedConditionIds.add(act.conditionId())) {
+                    continue;
+                }
+                closedPositionRepository.save(new ClosedPositionSnapshot(
+                        category,
+                        entry.proxyWallet(),
+                        entry.userName(),
+                        act.conditionId(),
+                        act.title(),
+                        act.slug(),
+                        act.eventSlug(),
+                        act.outcome(),
+                        true,
+                        act.outcome(),
+                        null,
+                        act.timestamp() != null
+                                ? DateTimeFormatter.ISO_LOCAL_DATE.format(
+                                        Instant.ofEpochSecond(act.timestamp()).atZone(ZoneOffset.UTC))
+                                : null,
                         now));
             }
         }

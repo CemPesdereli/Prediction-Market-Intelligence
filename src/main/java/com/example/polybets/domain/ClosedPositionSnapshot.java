@@ -7,9 +7,12 @@ import java.time.Instant;
 /**
  * Bir kategori senkronizasyonu sırasında, o kategorinin top-20 listesindeki bir
  * cüzdana ait, piyasası sonuçlanmış (son {polymarket.closed-window-days} gün
- * içinde bitmiş) bir pozisyonun kaydı. Kazanan pozisyonlar genelde hızla redeem
- * edilip Polymarket'in kendi listesinden düştüğü için burada ağırlıklı olarak
- * henüz redeem edilmemiş kayıtlar görülür; bu, harici API'nin doğal bir sınırıdır.
+ * içinde bitmiş) bir pozisyonun kaydı. İki kaynaktan besleniyor: henüz redeem
+ * edilmemiş pozisyonlar (/positions?redeemable=true — ağırlıklı kaybedenler,
+ * çünkü kazananlar hızla redeem edilip bu listeden düşüyor) ve redeem edilmiş
+ * kazananları yakalamak için on-chain REDEEM aktivitesi (/activity?type=REDEEM).
+ * REDEEM aktivitesinden gelen kayıtlarda cashPnl hesaplanamıyor (maliyet/avgPrice
+ * bilgisi aktivite akışında yok), bu yüzden bu kayıtlarda cashPnl null olabilir.
  */
 @Entity
 @Table(name = "closed_position_snapshot", indexes = {
