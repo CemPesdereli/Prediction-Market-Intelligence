@@ -8,11 +8,9 @@ import com.example.polybets.domain.LeaderboardEntry;
 import com.example.polybets.domain.PositionSnapshot;
 import com.example.polybets.repository.LeaderboardEntryRepository;
 import com.example.polybets.repository.PositionSnapshotRepository;
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,12 +18,12 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Her N dakikada bir (application.yml: polymarket.sync.cron) tanımlı her kategori için:
- *   1) O kategorinin aylık leaderboard'unun ilk top-n kullanıcısını çeker,
- *   2) Her kullanıcının şu anki aktif (redeemable=false) pozisyonlarını çeker,
- *   3) Sonucu H2'ye cache olarak yazar (bir önceki senkronizasyonun kayıtlarının yerine).
+ * Tek bir kategori için Polymarket'ten leaderboard + pozisyon verisini çeker ve
+ * H2'ye cache olarak yazar (bir önceki senkronizasyonun kayıtlarının yerine).
  *
- * Böylece web sayfası / REST API her istekte Polymarket'e gitmez, DB'den okur.
+ * Zamanlama/tetikleme {@link LeaderboardSyncScheduler}'da: syncCategory buradan
+ * sadece dışarıdan (baska bir bean uzerinden) cagrilmali ki @Transactional proxy
+ * uzerinden calissin (self-invocation @Transactional'i atlar).
  */
 @Service
 public class LeaderboardSyncService {
@@ -36,46 +34,16 @@ public class LeaderboardSyncService {
     private final LeaderboardEntryRepository leaderboardRepository;
     private final PositionSnapshotRepository positionRepository;
     private final int topN;
-    private final boolean syncEnabled;
 
     public LeaderboardSyncService(
             PolymarketDataApiClient apiClient,
             LeaderboardEntryRepository leaderboardRepository,
             PositionSnapshotRepository positionRepository,
-            @Value("${polymarket.top-n}") int topN,
-            @Value("${polymarket.sync.enabled}") boolean syncEnabled) {
+            @Value("${polymarket.top-n}") int topN) {
         this.apiClient = apiClient;
         this.leaderboardRepository = leaderboardRepository;
         this.positionRepository = positionRepository;
         this.topN = topN;
-        this.syncEnabled = syncEnabled;
-    }
-
-    /**
-     * Uygulama ayağa kalktığında en azından varsayılan kategori için bir kez veri
-     * dolu olsun diye ilk senkronizasyonu tetikler.
-     */
-    @PostConstruct
-    public void initialSync() {
-        if (!syncEnabled) {
-            log.info("Sync devre disi (polymarket.sync.enabled=false).");
-            return;
-        }
-        for (Category category : Category.values()) {
-            syncCategory(category);
-        }
-    }
-
-    @Scheduled(cron = "${polymarket.sync.cron}")
-    public void scheduledSync() {
-        if (!syncEnabled) {
-            return;
-        }
-        log.info("Zamanlanmis senkronizasyon basliyor...");
-        for (Category category : Category.values()) {
-            syncCategory(category);
-        }
-        log.info("Zamanlanmis senkronizasyon tamamlandi.");
     }
 
     /**
